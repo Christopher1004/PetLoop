@@ -4,6 +4,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import 'react-native-gesture-handler';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { createDrawerNavigator } from '@react-navigation/drawer';
+
+
+
 const Drawer = createDrawerNavigator();
 import TelaLogin from './pages/login';
 import TelaCadastro from './pages/cadastro';
@@ -18,19 +21,21 @@ import AulasConcluidas from './pages/AulasConcluidas';
 import VideoAulasRestantes from './pages/VideoAulasRestantes';
 import Adocao from './pages/Adocao';
 
-function NavDrawer() {
+function NavDrawer({ route }) {
+  const initialRoute = route?.params?.screen || 'Inicio';
+
   return (
     <Drawer.Navigator
+      initialRouteName={initialRoute}
+      drawerPosition="right"
+      drawerType="front"
       screenOptions={({ navigation }) => ({
-        drawerPosition: 'right',
         headerTitle: '',
         drawerStyle: {
-          height: 200,
           width: 200,
           borderTopLeftRadius: 20,
           borderBottomLeftRadius: 20,
         },
-        headerTransparent: true,
         headerLeft: () => null,
         headerRight: () => (
           <Ionicons
@@ -41,27 +46,22 @@ function NavDrawer() {
             style={{ marginRight: 15 }}
           />
         ),
-      })}>
+      })}
+    >
       <Drawer.Screen
         name="Inicio"
         component={TelaIndex}
-        options={{
-          headerShown: true,
-        }}
+        options={{ headerShown: true }}
       />
       <Drawer.Screen
         name="Perfil"
         component={TelaPerfil}
-        options={{
-          headerShown: true,
-        }}
+        options={{ headerShown: true }}
       />
       <Drawer.Screen
         name="Contato"
         component={TelaContato}
-        options={{
-          headerShown: true,
-        }}
+        options={{ headerShown: true }}
       />
     </Drawer.Navigator>
   );
@@ -73,56 +73,56 @@ export default function StackNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator>
-  <Stack.Screen
-    name="Entrar"
-    component={TelaLogin}
-    options={{ headerShown: false }}
-  />
-  <Stack.Screen
-    name="Cadastro"
-    component={TelaCadastro}
-    options={{ headerShown: false }}
-  />
-  <Stack.Screen
-    name="Drawer"
-    component={NavDrawer}
-    options={{ headerShown: false }}
-  />
-  <Stack.Screen
-    name="Buscar Treinamento"
-    component={BuscarTreinamento}
-    options={{
-      headerShown: true,
-      headerTintColor: '#5E2D8C',
-      headerTitleStyle: { color: '#fea740', fontWeight: 'bold' },
-    }}
-  />
-  <Stack.Screen
-    name="Treinamentos"
-    component={TelaTreinamentos}
-    options={{ headerShown: false }}
-  />
-  <Stack.Screen
-    name="Meus treinamentos"
-    component={MeusTreinamentos}
-    options={{ headerShown: false }}
-  />
-  <Stack.Screen
-    name="AulasConcluidas"
-    component={AulasConcluidas}
-    options={{ headerShown: false }}
-  />
-  <Stack.Screen
-    name="VideoAulasRestantes"
-    component={VideoAulasRestantes}
-    options={{ headerShown: false }}
-  />
-  <Stack.Screen
-    name="Adocao"
-    component={Adocao}
-    options={{ headerShown: false }}
-  />
-</Stack.Navigator>
+        <Stack.Screen
+          name="Entrar"
+          component={TelaLogin}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Cadastro"
+          component={TelaCadastro}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Drawer"
+          component={NavDrawer}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Buscar Treinamento"
+          component={BuscarTreinamento}
+          options={{
+            headerShown: true,
+            headerTintColor: '#5E2D8C',
+            headerTitleStyle: { color: '#fea740', fontWeight: 'bold' },
+          }}
+        />
+        <Stack.Screen
+          name="Treinamentos"
+          component={TelaTreinamentos}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Meus treinamentos"
+          component={MeusTreinamentos}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="AulasConcluidas"
+          component={AulasConcluidas}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="VideoAulasRestantes"
+          component={VideoAulasRestantes}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Adocao"
+          component={Adocao}
+          options={{ headerShown: false }}
+        />
+      </Stack.Navigator>
 
     </NavigationContainer>
   );

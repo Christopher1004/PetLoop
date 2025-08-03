@@ -1,9 +1,20 @@
 import { useState } from 'react';
 import {StyleSheet,Text,View,TextInput,TouchableOpacity,Image,} from 'react-native';
-
+import {auth} from './../configs/firebase_config';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 const TelaLogin = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+
+  const fazerLogin = async() => {
+    try{
+      await signInWithEmailAndPassword(auth, email, senha)
+      navigation.navigate('Drawer')
+    }
+    catch(error){
+      alert('Erro ao fazer login: ' + error.message)
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -38,7 +49,7 @@ const TelaLogin = ({ navigation }) => {
       <View style={styles.parteInferior}>
         <TouchableOpacity
           style={styles.botao}
-          onPress={() => navigation.navigate('Drawer')}>
+          onPress={fazerLogin}>
           <Text style={styles.textoBotao}>Entrar</Text>
         </TouchableOpacity>
 

@@ -1,9 +1,30 @@
 import { useState } from 'react';
 import {StyleSheet,Text,View,TextInput,TouchableOpacity,Image,} from 'react-native';
-
+import {auth, db} from './../configs/firebase_config';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 const TelaCadastro = ({ navigation }) => {
+  const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+
+  const cadastrar = async() => {
+    try{
+      const userCred = await createUserWithEmailAndPassword(auth, email,senha);
+      const uid = userCred.user.uid
+
+      await setDoc(doc(db, 'usuarios', uid), {
+        nome,
+        email,
+      })
+      alert('Usuario criado com sucesso!')
+      navigation.navigate('Entrar')
+    }
+    catch(error){
+      alert('Erro: ' + error.message)
+    }
+    
+  }
 
   return (
     <View style={styles.container}>
@@ -17,10 +38,10 @@ const TelaCadastro = ({ navigation }) => {
 
       <TextInput
         style={styles.input}
-        placeholder="Nome e Sobrenome"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
+        placeholder="Nome"
+        value={nome}
+        onChangeText={setNome}
+        keyboardType="default"
       />
       <TextInput
         style={styles.input}
@@ -37,7 +58,7 @@ const TelaCadastro = ({ navigation }) => {
         secureTextEntry
       />
 
-      <TouchableOpacity style={styles.botao}>
+      <TouchableOpacity onPress={cadastrar} style={styles.botao}>
         <Text style={styles.textoBotao}>Cadastrar</Text>
       </TouchableOpacity>
 
