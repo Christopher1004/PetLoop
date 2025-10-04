@@ -1,20 +1,79 @@
-import { useState } from 'react';
-import {StyleSheet,Text,View,TextInput,TouchableOpacity,Image,} from 'react-native';
-import {auth} from './../configs/firebase_config';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useState, useEffect } from 'react';
+import {StyleSheet,Text,View,TextInput,TouchableOpacity,Image} from 'react-native';
+import Checkbox from 'expo-checkbox';
+import { authService } from '../services/auth';
 const TelaLogin = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
 
-  const fazerLogin = async() => {
-    try{
-      await signInWithEmailAndPassword(auth, email, senha)
-      navigation.navigate('Drawer')
-    }
-    catch(error){
-      alert('Erro ao fazer login: ' + error.message)
+  // Verifica se existem credenciais salvas ao carregar a tela
+  useEffect(() => {
+    const verificarCredenciais = async () => {
+      try {
+        console.log('Verificando credenciais na tela de login...');
+        const credenciais = await authService.getSavedCredentials();
+        const rememberMe = await authService.isRememberMeActive();
+        
+        console.log('Credenciais encontradas na tela de login:', credenciais ? 'Sim' : 'Não');
+        console.log('RememberMe ativo na tela de login:', rememberMe ? 'Sim' : 'Não');
+        
+        if (credenciais && rememberMe) {
+          setEmail(credenciais.email);
+          setSenha(credenciais.password);
+          setLembrarDeMim(true);
+          
+          // Tenta fazer login automático
+          try {
+            await fazerLogin(true);
+          } catch (loginError) {
+            console.error('Erro no login automático:', loginError);
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao verificar credenciais:', error);
+      }
+    };
+
+    verificarCredenciais();
+  }, []);
+
+  const fazerLogin = async(isAutoLogin = false) => {
+    try {
+      console.log('Tentando fazer login...', isAutoLogin ? '(Automático)' : '(Manual)');
+      console.log('Estado do lembrarDeMim:', lembrarDeMim);
+      console.log('Email:', email);
+      
+      if (!email || !email.includes('@')) {
+        throw new Error('Por favor, insira um email válido');
+      }
+
+      if (!senha || senha.length < 6) {
+        throw new Error('A senha deve ter pelo menos 6 caracteres');
+      }
+      
+      await authService.login(email.trim(), senha, lembrarDeMim);
+      console.log('Login bem-sucedido!');
+      
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Drawer' }],
+      });
+    } catch(error) {
+      console.error('Erro ao fazer login:', error);
+      
+      // Limpa as credenciais em caso de erro no login automático
+      if (isAutoLogin) {
+        await authService.clearSavedCredentials();
+        setEmail('');
+        setSenha('');
+        setLembrarDeMim(false);
+      } else {
+        alert('Erro ao fazer login: ' + (error.message || 'Verifique suas credenciais'));
+      }
     }
   }
+
+  const [lembrarDeMim, setLembrarDeMim] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -42,7 +101,14 @@ const TelaLogin = ({ navigation }) => {
           secureTextEntry
         />
         <View style={styles.embaixoInput}>
-          <Text style={styles.Cadastre_se}>Lembrar de mim</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Checkbox
+              value={lembrarDeMim}
+              onValueChange={setLembrarDeMim}
+              color={lembrarDeMim ? '#4e2096' : '#4e2096'}
+            />
+            <Text style={styles.Cadastre_se}>Lembrar de mim</Text>
+          </View>
           <Text style={styles.Cadastre_se}>Esqueceu sua senha?</Text>
         </View>
       </View>

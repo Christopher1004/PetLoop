@@ -1,8 +1,70 @@
-import React from 'react';
-import {StyleSheet,View,Text,TouchableOpacity,} from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  Alert,
+  Platform
+} from 'react-native';
+import { auth } from '../configs/firebase_config';
+import { signOut } from 'firebase/auth';
+import { authService } from '../services/auth';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'; // Or 
 
-const ProfileScreen = () => {
+const ProfileScreen = ({ navigation }) => {
+  const [userData, setUserData] = useState({
+    name: '',
+    email: ''
+  });
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (user) {
+      setUserData({
+        name: user.displayName || 'Usuário',
+        email: user.email || ''
+      });
+    }
+  }, []);
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Sair da Conta',
+      'Tem certeza que deseja sair?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Sair',
+          onPress: async () => {
+            try {
+              console.log('Iniciando processo de logout...');
+              // Tenta fazer logout do Firebase diretamente
+              await signOut(auth);
+              console.log('Logout do Firebase realizado');
+              
+              // Limpa as credenciais salvas
+              await authService.clearSavedCredentials();
+              console.log('Credenciais locais limpas');
+              
+              // Navega para a tela de login
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Entrar' }]
+              });
+            } catch (error) {
+              console.error('Erro ao fazer logout:', error);
+              Alert.alert('Erro', 'Não foi possível sair da conta.');
+            }
+          },
+          style: 'destructive'
+        }
+      ]
+    );
+  };
   return (
     <View style={styles.container}>
       <Text style={styles.headerTitle}>Seu Perfil</Text>
@@ -15,8 +77,8 @@ const ProfileScreen = () => {
           style={styles.profileIcon}
         />
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>Amarildo Costa</Text>
-          <Text style={styles.profileEmail}>amarildocosta@gmail.com</Text>
+          <Text style={styles.profileName}>{userData.name}</Text>
+          <Text style={styles.profileEmail}>{userData.email}</Text>
         </View>
         <TouchableOpacity onPress={() => console.log('Edit Profile')}>
           <Icon name="pencil" size={20} color={'#4e2096'} />
@@ -42,6 +104,65 @@ const ProfileScreen = () => {
         style={styles.premiumButton}
         onPress={() => console.log('Go to Premium Version')}>
         <Text style={styles.premiumButtonText}>Versão Premium</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.logoutButton}
+        onPress={() => {
+          console.log('Botão de logout pressionado');
+          
+          const handleLogoutConfirmed = async () => {
+            try {
+              console.log('Iniciando processo de logout...');
+              await signOut(auth);
+              console.log('Logout do Firebase realizado');
+              
+              await authService.clearSavedCredentials();
+              console.log('Credenciais locais limpas');
+              
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Entrar' }]
+              });
+            } catch (error) {
+              console.error('Erro ao fazer logout:', error);
+              Alert.alert('Erro', 'Não foi possível sair da conta.');
+            }
+          };
+
+          const handleLogoutCanceled = () => {
+            console.log('Logout cancelado pelo usuário');
+          };
+
+          if (Platform.OS === 'web') {
+            // Para web, usar confirm nativo
+            if (window.confirm('Tem certeza que deseja sair?')) {
+              handleLogoutConfirmed();
+            } else {
+              handleLogoutCanceled();
+            }
+          } else {
+            // Para mobile, usar Alert do React Native
+            Alert.alert(
+              'Sair da Conta',
+              'Tem certeza que deseja sair?',
+              [
+                {
+                  text: 'Cancelar',
+                  onPress: handleLogoutCanceled,
+                  style: 'cancel',
+                },
+                {
+                  text: 'Sair',
+                  onPress: handleLogoutConfirmed,
+                  style: 'destructive',
+                },
+              ],
+              { cancelable: false }
+            );
+          }
+        }}>
+        <Text style={styles.logoutButtonText}>Sair da Conta</Text>
       </TouchableOpacity>
     </View>
   );
@@ -112,6 +233,28 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  logoutButton: {
+    backgroundColor: '#ff4444',
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 20,
+    marginTop: 20,
+    width: '90%',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  logoutButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
 

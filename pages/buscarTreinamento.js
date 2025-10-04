@@ -5,7 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 export default function BuscarTreinamento({ navigation }) {
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
 
-  const animais = ['Cães', 'Cavalos', 'Gatos', 'Macacos'];
+  const animais = ['Cães', 'Cavalos', 'Gatos'];
 
   return (
     <View style={styles.container}>

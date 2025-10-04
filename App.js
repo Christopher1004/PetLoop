@@ -1,14 +1,9 @@
-import React, { useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Animated,
-  Dimensions,
-  StyleSheet,
-} from 'react-native';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet } from 'react-native';
+import { authService } from './services/auth';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 import TelaLogin from './pages/login';
@@ -24,101 +19,117 @@ import VideoAulasRestantes from './pages/VideoAulasRestantes';
 import Adocao from './pages/Adocao';
 
 const Stack = createNativeStackNavigator();
-const SCREEN_WIDTH = Dimensions.get('window').width;
+const Drawer = createDrawerNavigator();
 
-function NavDrawer({ route }) {
-  const initialRoute = route?.params?.screen || 'Inicio';
-  const [drawerVisible, setDrawerVisible] = useState(false);
-  const drawerWidth = 200;
-  // Valor inicia em 0, que significa drawer fechado (right: drawerWidth - 0 = 200)
-  const drawerAnim = useRef(new Animated.Value(0)).current;
-  const [currentScreen, setCurrentScreen] = useState(initialRoute);
-
-  const toggleDrawer = () => {
-    if (drawerVisible) {
-      Animated.timing(drawerAnim, {
-        toValue: 0, // fechar drawer
-        duration: 300,
-        useNativeDriver: false,
-      }).start(() => setDrawerVisible(false));
-    } else {
-      setDrawerVisible(true);
-      Animated.timing(drawerAnim, {
-        toValue: drawerWidth, // abrir drawer
-        duration: 300,
-        useNativeDriver: false,
-      }).start();
-    }
-  };
-
-  const handleNavigate = (screen) => {
-    setCurrentScreen(screen);
-    toggleDrawer();
-  };
-
-  const renderScreen = () => {
-    switch (currentScreen) {
-      case 'Inicio':
-        return <TelaIndex />;
-      case 'Perfil':
-        return <TelaPerfil />;
-      case 'Contato':
-        return <TelaContato />;
-      default:
-        return <TelaIndex />;
-    }
-  };
-
+function DrawerNavigator() {
   return (
-    <View style={{ flex: 1 }}>
-      {/* Cabeçalho com botão de menu */}
-      <View style={styles.header}>
-        <Ionicons
-          name="menu"
-          size={30}
-          color="#5E2D8C"
-          onPress={toggleDrawer}
-          style={{ marginRight: 15 }}
-        />
-      </View>
-
-      {/* Conteúdo principal */}
-      <View style={{ flex: 1 }}>
-        {renderScreen()}
-      </View>
-
-      {/* Overlay que fecha o drawer */}
-      {drawerVisible && (
-        <TouchableOpacity
-          style={styles.overlay}
-          activeOpacity={1}
-          onPress={toggleDrawer}
-        />
-      )}
-
-      {/* Drawer lateral */}
-      <Animated.View style={[styles.drawer, { right: drawerWidth - drawerAnim }]}>
-        <Text style={styles.drawerTitle}>Menu</Text>
-        <TouchableOpacity onPress={() => handleNavigate('Inicio')}>
-          <Text style={styles.drawerItem}>Início</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleNavigate('Perfil')}>
-          <Text style={styles.drawerItem}>Perfil</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleNavigate('Contato')}>
-          <Text style={styles.drawerItem}>Contato</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    </View>
+    <Drawer.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: '#fff',
+          elevation: 3,
+        },
+        headerTintColor: '#5E2D8C',
+        drawerPosition: 'right',
+        drawerStyle: {
+          width: '50%',
+          height: '28%',
+          backgroundColor: '#fff',
+          borderTopLeftRadius: 20,
+          borderBottomLeftRadius: 20,
+          marginTop: '10px', // isso vai posicionar o drawer um pouco abaixo do topo
+        },
+        drawerLabelStyle: {
+          color: '#5E2D8C',
+          fontSize: 16,
+        },
+        drawerActiveBackgroundColor: 'rgba(94, 45, 140, 0.1)',
+        drawerActiveTintColor: '#5E2D8C',
+      }}
+    >
+      <Drawer.Screen
+        name="Inicio"
+        component={TelaIndex}
+        options={{
+          title: 'Início',
+          drawerIcon: ({ color }) => (
+            <Ionicons name="home-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="Perfil"
+        component={TelaPerfil}
+        options={{
+          drawerIcon: ({ color }) => (
+            <Ionicons name="person-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="Contato"
+        component={TelaContato}
+        options={{
+          drawerIcon: ({ color }) => (
+            <Ionicons name="mail-outline" size={24} color={color} />
+          ),
+        }}
+      />
+    </Drawer.Navigator>
   );
 }
 
 
 
 export default function StackNavigator() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      setIsLoading(true);
+      try {
+        console.log('=== Início da Verificação de Autenticação ===');
+        const credentials = await authService.getSavedCredentials();
+        const rememberMe = await authService.isRememberMeActive();
+        
+        console.log('Estado atual:', {
+          temCredenciais: credentials ? 'Sim' : 'Não',
+          lembrarDeMim: rememberMe ? 'Sim' : 'Não',
+          email: credentials?.email || 'Nenhum'
+        });
+        
+        if (credentials && rememberMe) {
+          console.log('Iniciando login automático...');
+          await authService.login(credentials.email, credentials.password, true);
+          console.log('Login automático realizado com sucesso!');
+          setIsAuthenticated(true);
+        } else {
+          console.log('Login automático não necessário:', {
+            motivo: !credentials ? 'Sem credenciais' : 'Lembrar de mim desativado'
+          });
+          setIsAuthenticated(false);
+        }
+      } catch (error) {
+        console.error('Erro durante verificação de autenticação:', error);
+        setIsAuthenticated(false);
+        await authService.clearSavedCredentials();
+      } finally {
+        setIsLoading(false);
+        console.log('=== Fim da Verificação de Autenticação ===');
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  if (isLoading) {
+    return null; // ou um componente de loading se preferir
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator>
+      <Stack.Navigator initialRouteName={isAuthenticated ? 'Drawer' : 'Entrar'}>
         <Stack.Screen
           name="Entrar"
           component={TelaLogin}
@@ -131,7 +142,7 @@ export default function StackNavigator() {
         />
         <Stack.Screen
           name="Drawer"
-          component={NavDrawer}
+          component={DrawerNavigator}
           options={{ headerShown: false }}
         />
         <Stack.Screen
@@ -174,45 +185,5 @@ export default function StackNavigator() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    height: 60,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingHorizontal: 15,
-    backgroundColor: '#fff',
-    elevation: 3,
-    zIndex: 2,
-  },
-  drawer: {
-    position: 'absolute',
-    top: 60, // abaixo do header
-    width: 200,
-    backgroundColor: '#fff',
-    padding: 20,
-    zIndex: 3,
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
-    elevation: 6,
-    maxHeight: 300, // controla altura máxima
-  },
-  overlay: {
-    position: 'absolute',
-    top: 60,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    zIndex: 2,
-  },
-  drawerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#5E2D8C',
-  },
-  drawerItem: {
-    fontSize: 16,
-    paddingVertical: 10,
-    color: '#5E2D8C',
-  },
+  // Estilos podem ser adicionados conforme necessário
 });
