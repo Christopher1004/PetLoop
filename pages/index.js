@@ -41,12 +41,12 @@ const TelaIndex = ({ navigation }) => {
         <View style={styles.textContent}>
           <Text style={styles.title}>Treinamento</Text>
           <Text style={styles.subtitle}>
-            Os melhores trainementos para seu pet de apoio.
+            Os melhores treinamentos para seu pet de apoio.
           </Text>
         </View>
         <TouchableOpacity
           style={styles.circleButton}
-          onPress={() => navigation.navigate('Buscar Treinamento')}
+          onPress={() => navigation.navigate('Buscar Videos')}
         />
       </View>
     </View>

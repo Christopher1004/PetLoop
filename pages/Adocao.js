@@ -1,14 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image, TextInput, ScrollView, Alert, Modal, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image, TextInput, ScrollView, Modal, ActivityIndicator, Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 import { auth } from '../configs/firebase_config';
+
+const CustomAlert = ({ visible, title, message, onClose }) => {
+  if (!visible) return null;
+  
+  if (Platform.OS === 'web') {
+    // Web alert implementation
+    return (
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={visible}
+        onRequestClose={onClose}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={styles.alertBox}>
+            <Text style={styles.alertTitle}>{title}</Text>
+            <Text style={styles.alertMessage}>{message}</Text>
+            <TouchableOpacity style={styles.alertButton} onPress={onClose}>
+              <Text style={styles.alertButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  } else {
+    // Native platforms use standard Alert
+    Alert.alert(title, message, [{ text: 'OK', onPress: onClose }]);
+    return null;
+  }
+};
 
 const Adocao = ({ navigation }) => {
   const [formAbertoId, setFormAbertoId] = useState(null);
-  const [comprovante, setComprovante] = useState(null);
-  const [comprovanteNome, setComprovanteNome] = useState(null);
+  const [comprovantes, setComprovantes] = useState({});
   const [modalVisible, setModalVisible] = useState(false);
+  const [modalVisualizarTermo, setModalVisualizarTermo] = useState(false);
+  const [termoAtual, setTermoAtual] = useState(null);
+  const [alertConfig, setAlertConfig] = useState({
+    visible: false,
+    title: '',
+    message: ''
+  });
   const [userData, setUserData] = useState({
     nome: '',
     email: '',
@@ -16,10 +51,8 @@ const Adocao = ({ navigation }) => {
   });
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [termoGerado, setTermoGerado] = useState(null);
-  const [termoNome, setTermoNome] = useState(null);
+  const [termosGerados, setTermosGerados] = useState({});
 
-  // Carrega dados do usuário ao montar o componente
   useEffect(() => {
     const user = auth.currentUser;
     if (user) {
@@ -31,116 +64,124 @@ const Adocao = ({ navigation }) => {
     }
   }, []);
 
-  const handleUploadComprovante = async () => {
+  const handleUploadComprovante = async (cardId) => {
     try {
-      console.log('Iniciando seleção de documento...');
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*'],
         copyToCacheDirectory: true
       });
 
-      console.log('Resultado da seleção:', result);
-
       if (result.canceled === false && result.assets && result.assets.length > 0) {
         const file = result.assets[0];
-        console.log('Arquivo selecionado:', file);
-
-        // Verifica o tamanho do arquivo (limite de 5MB)
         const fileSize = file.size;
-        const maxSize = 5 * 1024 * 1024; // 5MB em bytes
+        const maxSize = 5 * 1024 * 1024; 
 
         if (fileSize > maxSize) {
-          Alert.alert('Erro', 'O arquivo é muito grande. Selecione um arquivo menor que 5MB.');
+          setAlertConfig({
+            visible: true,
+            title: 'Erro',
+            message: 'O arquivo é muito grande. Selecione um arquivo menor que 5MB.'
+          });
           return;
         }
 
-        // Atualiza o estado com as informações do arquivo
-        setComprovante(file);
-        setComprovanteNome(file.name);
-        console.log('Documento anexado com sucesso:', file.name);
-      } else {
-        console.log('Seleção cancelada ou sem arquivo');
+        setComprovantes(prev => ({
+          ...prev,
+          [cardId]: {
+            file: file,
+            nome: file.name
+          }
+        }));
       }
     } catch (error) {
-      console.log('Erro ao selecionar documento:', error);
-      Alert.alert('Erro', 'Não foi possível selecionar o documento. Tente novamente.');
+      setAlertConfig({
+        visible: true,
+        title: 'Erro',
+        message: 'Não foi possível selecionar o documento. Tente novamente.'
+      });
     }
   };
 
   const abrirModalTermo = (animal) => {
     try {
       setAnimalSelecionado(animal);
-      console.log('Animal selecionado:', animal);
-      setTimeout(() => {
-        setModalVisible(true);
-        console.log('Modal aberto');
-      }, 100);
+      setModalVisible(true);
     } catch (error) {
-      console.error('Erro ao abrir modal:', error);
-      Alert.alert('Erro', 'Houve um problema ao abrir o formulário. Tente novamente.');
+      setAlertConfig({
+        visible: true,
+        title: 'Erro',
+        message: 'Houve um problema ao abrir o formulário. Tente novamente.'
+      });
     }
   };
 
-  const gerarTermo = async () => {
+  const gerarTermo = () => {
     try {
       setIsLoading(true);
       
-      // Validar formato do CPF primeiro
       const cpfLimpo = userData.cpf.replace(/\D/g, '');
       if (cpfLimpo.length !== 11) {
         setIsLoading(false);
-        Alert.alert('CPF inválido', 'Por favor, digite os 11 dígitos do CPF.');
-        return;
-      }
-
-      // Validações rápidas
-      if (!userData.cpf || !comprovante || !animalSelecionado) {
-        setIsLoading(false);
-        Alert.alert('Erro', 'Por favor, preencha todos os campos necessários.');
-        return;
-      }
-
-    const fileName = `termo_adocao_${Date.now()}.txt`;
-    const fileUri = FileSystem.documentDirectory + fileName;
-    
-    const conteudoTermo = [
-      'TERMO DE RESPONSABILIDADE DE ADOÇÃO\n',
-      `Data: ${new Date().toLocaleDateString()}\n`,
-      `Nome do Adotante: ${userData.nome}`,
-      `E-mail: ${userData.email}`,
-      `CPF: ${userData.cpf}`,
-      `Animal: ${animalSelecionado.nome}\n`,
-      'Declaro estar ciente das responsabilidades de adotar um animal de estimação,',
-      'comprometendo-me a proporcionar todos os cuidados necessários para seu bem-estar.\n',
-      'Assinatura: _____________________________',
-      userData.nome,
-      `CPF: ${userData.cpf}`
-    ].join('\n');
-
-    try {
-      await FileSystem.writeAsStringAsync(fileUri, conteudoTermo)
-        .then(() => {
-          setTermoGerado({
-            uri: fileUri,
-            tipo: 'text/plain',
-            name: fileName
-          });
-          setTermoNome(fileName);
-          setModalVisible(false);
-        })
-        .finally(() => {
-          setIsLoading(false);
+        setAlertConfig({
+          visible: true,
+          title: 'CPF inválido',
+          message: 'Por favor, digite os 11 dígitos do CPF.'
         });
-    } catch (error) {
-      console.error('Erro ao gerar termo:', error);
+        return;
+      }
+
+      if (!userData.cpf || !animalSelecionado) {
+        setIsLoading(false);
+        setAlertConfig({
+          visible: true,
+          title: 'Erro',
+          message: 'Por favor, preencha todos os campos necessários.'
+        });
+        return;
+      }
+
+      const now = new Date();
+      const fileName = `termo_adocao_${animalSelecionado.id}_${now.getTime()}.txt`;
+      
+      const conteudoTermo = [
+        'TERMO DE RESPONSABILIDADE DE ADOÇÃO\n',
+        `Data: ${now.toLocaleDateString()}`,
+        `Hora: ${now.toLocaleTimeString()}\n`,
+        `Nome do Adotante: ${userData.nome}`,
+        `E-mail: ${userData.email}`,
+        `CPF: ${userData.cpf}`,
+        `Animal: ${animalSelecionado.nome}\n`,
+        'Declaro estar ciente das responsabilidades de adotar um animal de estimação,',
+        'comprometendo-me a proporcionar todos os cuidados necessários para seu bem-estar,',
+        'incluindo alimentação adequada, cuidados veterinários, abrigo e carinho.\n',
+        userData.nome,
+        `CPF: ${userData.cpf}`
+      ].join('\n');
+
+      const novoTermo = {
+        conteudo: conteudoTermo,
+        tipo: 'text/plain',
+        nome: fileName,
+        data: now.toLocaleDateString()
+      };
+
+      setTermosGerados(prev => ({
+        ...prev,
+        [animalSelecionado.id]: novoTermo
+      }));
+      
+      setModalVisible(false);
+      setTermoAtual(novoTermo);
+      setModalVisualizarTermo(true);
       setIsLoading(false);
-      Alert.alert('Erro', 'Não foi possível gerar o termo. Tente novamente.');
+    } catch (error) {
+      setIsLoading(false);
+      setAlertConfig({
+        visible: true,
+        title: 'Erro',
+        message: 'Não foi possível gerar o termo. Tente novamente.'
+      });
     }
-  } catch (error) {
-    console.error('Erro ao gerar termo:', error);
-    setIsLoading(false);
-    Alert.alert('Erro', 'Não foi possível gerar o termo. Tente novamente.');
-  }
   };
 
   const cards = [
@@ -192,10 +233,10 @@ const Adocao = ({ navigation }) => {
               <View style={styles.formulario}>
 
                 <View style={styles.comprovanteContainer}>
-                  {!comprovante ? (
+                  {!comprovantes[card.id] ? (
                     <TouchableOpacity
                       style={styles.botaoUpload}
-                      onPress={handleUploadComprovante}
+                      onPress={() => handleUploadComprovante(card.id)}
                     >
                       <Text style={styles.textoUpload}>Anexar comprovante de residência</Text>
                     </TouchableOpacity>
@@ -203,7 +244,7 @@ const Adocao = ({ navigation }) => {
                     <View style={styles.comprovanteInfo}>
                       <View style={styles.arquivoInfo}>
                         <Text style={styles.comprovanteNome} numberOfLines={1} ellipsizeMode="middle">
-                          {comprovanteNome}
+                          {comprovantes[card.id].nome}
                         </Text>
                         <Text style={styles.comprovanteData}>
                           {new Date().toLocaleDateString()}
@@ -211,8 +252,11 @@ const Adocao = ({ navigation }) => {
                       </View>
                       <TouchableOpacity
                         onPress={() => {
-                          setComprovante(null);
-                          setComprovanteNome(null);
+                          setComprovantes(prev => {
+                            const novo = {...prev};
+                            delete novo[card.id];
+                            return novo;
+                          });
                         }}
                         style={styles.botaoRemover}
                       >
@@ -222,65 +266,39 @@ const Adocao = ({ navigation }) => {
                   )}
                 </View>
 
-                {!termoGerado ? (
+                {!termosGerados[card.id] ? (
                   <TouchableOpacity
                     style={styles.botaoGerarTermo}
-                    onPress={() => {
-                      console.log('Botão clicado para o card:', card);
-                      abrirModalTermo(card);
-                    }}
+                    onPress={() => abrirModalTermo(card)}
                   >
                     <Text style={styles.textoBotaoTermo}>Gerar termo de responsabilidade</Text>
                   </TouchableOpacity>
                 ) : (
-                  <View style={styles.termoContainer}>
+                  <View style={styles.comprovanteInfo}>
+                    <View style={styles.arquivoInfo}>
+                      <Text style={styles.comprovanteNome} numberOfLines={1} ellipsizeMode="middle">
+                        {termosGerados[card.id].nome}
+                      </Text>
+                      <Text style={styles.comprovanteData}>
+                        {termosGerados[card.id].data}
+                      </Text>
+                    </View>
                     <TouchableOpacity
-                      style={styles.termoGerado}
-                      onPress={async () => {
+                      onPress={() => {
                         try {
-                          const content = await FileSystem.readAsStringAsync(termoGerado.uri);
-                          Alert.alert(
-                            'Termo de Responsabilidade',
-                            content,
-                            [{ text: 'Fechar' }]
-                          );
+                          setTermoAtual(termosGerados[card.id]);
+                          setModalVisualizarTermo(true);
                         } catch (error) {
-                          Alert.alert('Erro', 'Não foi possível abrir o termo.');
+                          setAlertConfig({
+                            visible: true,
+                            title: 'Erro',
+                            message: 'Não foi possível abrir o termo.'
+                          });
                         }
                       }}
+                      style={styles.botaoVisualizar}
                     >
-                      <Text style={styles.termoNome}>{termoNome}</Text>
-                      <Text style={styles.termoData}>{new Date().toLocaleDateString()}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.botaoRemoverTermo}
-                      onPress={() => {
-                        Alert.alert(
-                          'Remover Termo',
-                          'Tem certeza que deseja remover o termo de responsabilidade?',
-                          [
-                            {
-                              text: 'Cancelar',
-                              style: 'cancel'
-                            },
-                            {
-                              text: 'Remover',
-                              style: 'destructive',
-                              onPress: async () => {
-                                try {
-                                  await FileSystem.deleteAsync(termoGerado.uri);
-                                  setTermoGerado(null);
-                                  setTermoNome(null);
-                                } catch (error) {
-                                  Alert.alert('Erro', 'Não foi possível remover o termo.');
-                                }
-                              }
-                            }
-                          ]
-                        );
-                      }}
-                    >
-                      <Text style={styles.textoRemover}>Remover</Text>
+                      <Text style={styles.textoVisualizar}>Visualizar</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -290,27 +308,74 @@ const Adocao = ({ navigation }) => {
                     style={[styles.botaoAcao, styles.botaoCancelar]}
                     onPress={() => {
                       setFormAbertoId(null);
-                      setComprovante(null);
-                      setComprovanteNome(null);
+                      // Limpar comprovante
+                      setComprovantes(prev => {
+                        const novo = {...prev};
+                        delete novo[card.id];
+                        return novo;
+                      });
+                      // Limpar termo gerado
+                      setTermosGerados(prev => {
+                        const novo = {...prev};
+                        delete novo[card.id];
+                        return novo;
+                      });
+                      // Limpar CPF
+                      setUserData(prev => ({
+                        ...prev,
+                        cpf: ''
+                      }));
                     }}
                   >
                     <Text style={styles.textoBotaoCancelar}>Cancelar</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[styles.botaoAcao, styles.botaoEnviar]}
+                    style={[
+                      styles.botaoAcao,
+                      styles.botaoEnviar,
+                      (!comprovantes[card.id] || !termosGerados[card.id]) && styles.botaoEnviarDesabilitado
+                    ]}
                     onPress={() => {
-                      if (!comprovante) {
-                        Alert.alert('Erro', 'Por favor, anexe o comprovante de residência');
+                      if (!comprovantes[card.id] || !termosGerados[card.id]) {
+                        let mensagem = [];
+                        if (!comprovantes[card.id]) mensagem.push('comprovante de residência');
+                        if (!termosGerados[card.id]) mensagem.push('termo de responsabilidade');
+                        
+                        setAlertConfig({
+                          visible: true,
+                          title: 'Documentos Pendentes',
+                          message: `Por favor, anexe o(s) seguinte(s) documento(s): ${mensagem.join(' e ')}.`
+                        });
                         return;
                       }
-                      Alert.alert('Sucesso', 'Solicitação de adoção enviada com sucesso!');
+                      setAlertConfig({
+                        visible: true,
+                        title: 'Sucesso',
+                        message: 'Solicitação de adoção enviada com sucesso!'
+                      });
+                      // Limpar tudo após o envio
                       setFormAbertoId(null);
-                      setComprovante(null);
-                      setComprovanteNome(null);
+                      setComprovantes(prev => {
+                        const novo = {...prev};
+                        delete novo[card.id];
+                        return novo;
+                      });
+                      setTermosGerados(prev => {
+                        const novo = {...prev};
+                        delete novo[card.id];
+                        return novo;
+                      });
+                      setUserData(prev => ({
+                        ...prev,
+                        cpf: ''
+                      }));
                     }}
                   >
-                    <Text style={styles.textoBotaoEnviar}>Enviar</Text>
+                    <Text style={[
+                      styles.textoBotaoEnviar,
+                      (!comprovantes[card.id] || !termosGerados[card.id]) && styles.textoBotaoEnviarDesabilitado
+                    ]}>Enviar</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -319,7 +384,6 @@ const Adocao = ({ navigation }) => {
         ))}
       </ScrollView>
 
-      {/* Modal do Termo de Responsabilidade */}
       <Modal
         animationType="none"
         transparent={true}
@@ -349,8 +413,6 @@ const Adocao = ({ navigation }) => {
                 keyboardType="numeric"
                 maxLength={11}
               />
-
-
             </View>
 
             <View style={styles.modalButtons}>
@@ -376,11 +438,144 @@ const Adocao = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisualizarTermo}
+        onRequestClose={() => setModalVisualizarTermo(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.termoHeader}>
+              <Text style={styles.termoTitle}>Termo de Responsabilidade</Text>
+            </View>
+            
+            <ScrollView style={styles.termoScroll}>
+              <View style={styles.termoContainer}>
+                <Text style={styles.termoConteudo} selectable>
+                  {termoAtual?.conteudo || ''}
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.buttonCancelar]}
+                onPress={() => setModalVisualizarTermo(false)}
+              >
+                <Text style={styles.buttonTextCancelar}>Fechar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <CustomAlert
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertConfig(prev => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 };
-
 const styles = StyleSheet.create({
+  termoModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 15,
+    padding: 0,
+    width: '90%',
+    maxWidth: 600,
+    maxHeight: '90%',
+  },
+  termoHeader: {
+    backgroundColor: '#4e2096',
+    padding: 20,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+    alignItems: 'center',
+  },
+  termoTitle: {
+    color: '#ffffff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  termoSubtitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    opacity: 0.8,
+  },
+  termoContainer: {
+    padding: 20,
+    backgroundColor: '#ffffff',
+  },
+  termoScroll: {
+    backgroundColor: '#ffffff',
+  },
+  termoConteudo: {
+    fontSize: 16,
+    color: '#333333',
+    lineHeight: 24,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  buttonFechar: {
+    backgroundColor: '#4e2096',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    marginTop: 10,
+  },
+  buttonTextFechar: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  alertOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  alertBox: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    width: '80%',
+    maxWidth: 300,
+    alignItems: 'center',
+    boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+  },
+  alertTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#4e2096',
+  },
+  alertMessage: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#333',
+  },
+  alertButton: {
+    backgroundColor: '#4e2096',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
+  },
+  alertButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -478,6 +673,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 15,
   },
+  botaoVisualizar: {
+    backgroundColor: '#4e2096',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+  },
+  textoVisualizar: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   textoRemover: {
     color: 'white',
     fontSize: 12,
@@ -500,6 +706,10 @@ const styles = StyleSheet.create({
   botaoEnviar: {
     backgroundColor: '#4CAF50',
   },
+  botaoEnviarDesabilitado: {
+    backgroundColor: '#A5D6A7',
+    opacity: 0.7,
+  },
   textoBotaoCancelar: {
     color: '#333',
     fontWeight: 'bold',
@@ -509,6 +719,9 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  textoBotaoEnviarDesabilitado: {
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   container: {
     flex: 1,
@@ -602,27 +815,9 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
-  termoContainer: {
+  termoGeradoContainer: {
     marginTop: 15,
     width: '100%',
-  },
-  termoGerado: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#4e2096',
-    marginBottom: 8,
-  },
-  termoNome: {
-    color: '#4e2096',
-    fontWeight: 'bold',
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  termoData: {
-    color: '#666',
-    fontSize: 12,
   },
   botaoRemoverTermo: {
     backgroundColor: '#ff4444',
@@ -630,6 +825,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 15,
     alignItems: 'center',
+  },
+  termoHeader: {
+    backgroundColor: '#4e2096',
+    padding: 15,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+    marginBottom: 10,
+  },
+  termoTitle: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  termoScroll: {
+    maxHeight: '80%',
+    marginBottom: 20,
+    backgroundColor: '#f9f9f9',
+  },
+  termoContainer: {
+    padding: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    margin: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  termoConteudo: {
+    fontSize: 16,
+    color: '#333',
+    lineHeight: 24,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });
 

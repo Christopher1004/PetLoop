@@ -17,6 +17,7 @@ import MeusTreinamentos from './pages/MeusTreinamentos';
 import AulasConcluidas from './pages/AulasConcluidas';
 import VideoAulasRestantes from './pages/VideoAulasRestantes';
 import Adocao from './pages/Adocao';
+import BuscarVideos from './pages/buscarVideos';
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -178,6 +179,15 @@ export default function StackNavigator() {
           name="Adocao"
           component={Adocao}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Buscar Videos"
+          component={BuscarVideos}
+          options={{
+            headerShown: true,
+            headerTintColor: '#5E2D8C',
+            headerTitleStyle: { color: '#fea740', fontWeight: 'bold' },
+          }}
         />
       </Stack.Navigator>
     </NavigationContainer>
