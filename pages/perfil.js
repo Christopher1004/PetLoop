@@ -5,10 +5,12 @@ import {
   Text,
   TouchableOpacity,
   Alert,
-  Platform
+  Platform,
+  TextInput
 } from 'react-native';
-import { auth } from '../configs/firebase_config';
-import { signOut } from 'firebase/auth';
+import { auth, db } from '../configs/firebase_config';
+import { signOut, updateProfile } from 'firebase/auth';
+import { doc, updateDoc } from 'firebase/firestore';
 import { authService } from '../services/auth';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'; // Or 
 
@@ -17,6 +19,9 @@ const ProfileScreen = ({ navigation }) => {
     name: '',
     email: ''
   });
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [isConfigExpanded, setIsConfigExpanded] = useState(false);
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -69,7 +74,7 @@ const ProfileScreen = ({ navigation }) => {
     <View style={styles.container}>
       <Text style={styles.headerTitle}>Seu Perfil</Text>
 
-      <View style={styles.profileCard}>
+        <View style={styles.profileCard}>
         <Icon
           name="account-circle"
           size={40}
@@ -80,31 +85,110 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={styles.profileName}>{userData.name}</Text>
           <Text style={styles.profileEmail}>{userData.email}</Text>
         </View>
-        <TouchableOpacity onPress={() => console.log('Edit Profile')}>
-          <Icon name="pencil" size={20} color={'#4e2096'} />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.navigationSection}>
         <TouchableOpacity
           style={styles.navigationItem}
-          onPress={() => console.log('Go to Your Aid Pet')}>
-          <Text style={styles.navigationItemText}>Seu Pet de Auxílio</Text>
-          <Icon name="chevron-right" size={24} color="gray" />
+          onPress={() => setIsConfigExpanded(!isConfigExpanded)}>
+          <Text style={styles.navigationItemText}>Configurações</Text>
+          <Icon 
+            name={isConfigExpanded ? "chevron-up" : "chevron-down"} 
+            size={24} 
+            color="gray" 
+          />
         </TouchableOpacity>
+        
+        {isConfigExpanded && (
+          <View style={styles.expandedSection}>
+            {!isEditingName ? (
+              <TouchableOpacity
+                style={styles.expandedItem}
+                onPress={() => {
+                  setNewName(userData.name);
+                  setIsEditingName(true);
+                }}>
+                <Icon name="account-edit" size={20} color={'#4e2096'} style={{ marginRight: 10 }} />
+                <Text style={styles.expandedItemText}>Editar Nome</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.editNameContainer}>
+                <TextInput
+                  style={styles.editNameInput}
+                  value={newName}
+                  onChangeText={setNewName}
+                  placeholder="Digite seu nome"
+                  placeholderTextColor="#999"
+                  autoFocus
+                />
+                <View style={styles.editNameButtons}>
+                  <TouchableOpacity
+                    style={[styles.editNameBtn, styles.cancelEditBtn]}
+                    onPress={() => {
+                      setIsEditingName(false);
+                      setNewName('');
+                    }}>
+                    <Text style={styles.cancelEditText}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.editNameBtn, styles.saveEditBtn]}
+                    onPress={async () => {
+                      try {
+                        const user = auth.currentUser;
+                        if (user && newName.trim() !== '') {
+                          // Atualiza o displayName no Firebase Auth
+                          await updateProfile(user, {
+                            displayName: newName
+                          });
+
+                          // Atualiza o nome no Firestore
+                          const userDocRef = doc(db, 'usuarios', user.uid);
+                          await updateDoc(userDocRef, {
+                            nome: newName
+                          });
+
+                          setUserData(prev => ({
+                            ...prev,
+                            name: newName
+                          }));
+                          setIsEditingName(false);
+                          
+                          if (Platform.OS === 'web') {
+                            alert('Nome atualizado com sucesso!');
+                          } else {
+                            Alert.alert('Sucesso', 'Nome atualizado com sucesso!');
+                          }
+                        } else if (newName.trim() === '') {
+                          if (Platform.OS === 'web') {
+                            alert('Por favor, digite um nome válido.');
+                          } else {
+                            Alert.alert('Aviso', 'Por favor, digite um nome válido.');
+                          }
+                        }
+                      } catch (error) {
+                        console.error('Erro ao atualizar nome:', error);
+                        if (Platform.OS === 'web') {
+                          alert('Não foi possível atualizar o nome: ' + error.message);
+                        } else {
+                          Alert.alert('Erro', 'Não foi possível atualizar o nome.');
+                        }
+                      }
+                    }}>
+                    <Text style={styles.saveEditText}>Enviar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
         <TouchableOpacity
           style={styles.navigationItem}
-          onPress={() => console.log('Go to Your Trainings')}>
-          <Text style={styles.navigationItemText}>Seus Treinamentos</Text>
+          onPress={() => console.log('Sobre o Aplicativo')}>
+          <Text style={styles.navigationItemText}>Sobre o Aplicativo</Text>
           <Icon name="chevron-right" size={24} color="gray" />
         </TouchableOpacity>
       </View>
-
-      <TouchableOpacity
-        style={styles.premiumButton}
-        onPress={() => console.log('Go to Premium Version')}>
-        <Text style={styles.premiumButtonText}>Versão Premium</Text>
-      </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.logoutButton}
@@ -171,7 +255,7 @@ const ProfileScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'lightBackground',
+    backgroundColor: '#F5F5F5',
     alignItems: 'center',
     paddingTop: 20,
   },
@@ -222,6 +306,60 @@ const styles = StyleSheet.create({
   navigationItemText: {
     fontSize: 16,
     color: 'lightGray',
+  },
+  expandedSection: {
+    backgroundColor: '#F9F9F9',
+    paddingVertical: 5,
+  },
+  expandedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    paddingLeft: 25,
+  },
+  expandedItemText: {
+    fontSize: 15,
+    color: '#4e2096',
+  },
+  editNameContainer: {
+    padding: 15,
+    paddingLeft: 25,
+  },
+  editNameInput: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 15,
+    color: '#333',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginBottom: 10,
+  },
+  editNameButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  editNameBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  cancelEditBtn: {
+    backgroundColor: '#E0E0E0',
+  },
+  saveEditBtn: {
+    backgroundColor: '#4e2096',
+  },
+  cancelEditText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  saveEditText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   premiumButton: {
     backgroundColor: '#fea740',

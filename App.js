@@ -18,6 +18,8 @@ import AulasConcluidas from './pages/AulasConcluidas';
 import VideoAulasRestantes from './pages/VideoAulasRestantes';
 import Adocao from './pages/Adocao';
 import BuscarVideos from './pages/buscarVideos';
+import MeusAnimais from './pages/MeusAnimais';
+import CadastrarAnimal from './pages/CadastrarAnimal';
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -185,6 +187,26 @@ export default function StackNavigator() {
           component={BuscarVideos}
           options={{
             headerShown: true,
+            headerTintColor: '#5E2D8C',
+            headerTitleStyle: { color: '#fea740', fontWeight: 'bold' },
+          }}
+        />
+        <Stack.Screen
+          name="MeusAnimais"
+          component={MeusAnimais}
+          options={{
+            headerShown: true,
+            headerTitle: 'Meus Animais',
+            headerTintColor: '#5E2D8C',
+            headerTitleStyle: { color: '#fea740', fontWeight: 'bold' },
+          }}
+        />
+        <Stack.Screen
+          name="CadastrarAnimal"
+          component={CadastrarAnimal}
+          options={{
+            headerShown: true,
+            headerTitle: 'Cadastrar Animal',
             headerTintColor: '#5E2D8C',
             headerTitleStyle: { color: '#fea740', fontWeight: 'bold' },
           }}

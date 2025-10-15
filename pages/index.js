@@ -1,12 +1,49 @@
-import { useState } from 'react';
-import {StyleSheet,Text,View,TouchableOpacity,Image,} from 'react-native';
+import { useState, useEffect } from 'react';
+import {StyleSheet,Text,View,TouchableOpacity,Image,ActivityIndicator} from 'react-native';
 import 'react-native-gesture-handler';
 
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NavigationContainer } from '@react-navigation/native';
+import { auth, db } from '../configs/firebase_config';
+import { doc, getDoc } from 'firebase/firestore';
 
 const TelaIndex = ({ navigation }) => {
+  const [userType, setUserType] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUserType = async () => {
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const userDocRef = doc(db, 'usuarios', user.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUserType(userData.tipo || 'Tutor'); 
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao buscar tipo de usuário:', error);
+        setUserType('Tutor'); 
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserType();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4e2096" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.parteSuperior}>
@@ -15,44 +52,88 @@ const TelaIndex = ({ navigation }) => {
           style={{ width: 250, height: 100 }}
         />
       </View>
-      <Text style={styles.titulo}>O que você esta buscando?</Text>
-      <View style={styles.card}>
-        <Ionicons name="home-outline" size={30} color={'#4e2096'} />
-        <View style={styles.textContent}>
-          <Text style={styles.title}>Adoção</Text>
-          <Text style={styles.subtitle}>
-            Entre e escolha qual animalzinho será seu.
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.circleButton}
-          onPress={() => navigation.navigate('Adocao')}
-        />
-      </View>
+      <Text style={styles.titulo}>
+        {userType === 'Doador' ? 'Gerenciar Doações' : 'O que você está buscando?'}
+      </Text>
 
-      <View style={styles.card}>
-        <MaterialCommunityIcons
-          name="bone"
-          size={30}
-          color={'#4e2096'}
-          style={{ transform: [{ rotate: '135deg' }] }}
-        />
+      {userType === 'Doador' ? (
+        // Cards para Doador
+        <>
+          <View style={styles.card}>
+            <Ionicons name="paw-outline" size={30} color={'#4e2096'} />
+            <View style={styles.textContent}>
+              <Text style={styles.title}>Meus Animais</Text>
+              <Text style={styles.subtitle}>
+                Veja e gerencie os animais que você colocou para adoção.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.circleButton}
+              onPress={() => navigation.navigate('MeusAnimais')}
+            />
+          </View>
 
-        <View style={styles.textContent}>
-          <Text style={styles.title}>Treinamento</Text>
-          <Text style={styles.subtitle}>
-            Os melhores treinamentos para seu pet de apoio.
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.circleButton}
-          onPress={() => navigation.navigate('Buscar Videos')}
-        />
-      </View>
+          <View style={styles.card}>
+            <Ionicons name="add-circle-outline" size={30} color={'#4e2096'} />
+            <View style={styles.textContent}>
+              <Text style={styles.title}>Colocar Animal para Adoção</Text>
+              <Text style={styles.subtitle}>
+                Cadastre um novo animal disponível para adoção.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.circleButton}
+              onPress={() => navigation.navigate('CadastrarAnimal')}
+            />
+          </View>
+        </>
+      ) : (
+        // Cards para Tutor
+        <>
+          <View style={styles.card}>
+            <Ionicons name="home-outline" size={30} color={'#4e2096'} />
+            <View style={styles.textContent}>
+              <Text style={styles.title}>Adoção</Text>
+              <Text style={styles.subtitle}>
+                Entre e escolha qual animalzinho será seu.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.circleButton}
+              onPress={() => navigation.navigate('Adocao')}
+            />
+          </View>
+
+          <View style={styles.card}>
+            <MaterialCommunityIcons
+              name="bone"
+              size={30}
+              color={'#4e2096'}
+              style={{ transform: [{ rotate: '135deg' }] }}
+            />
+            <View style={styles.textContent}>
+              <Text style={styles.title}>Treinamento</Text>
+              <Text style={styles.subtitle}>
+                Os melhores treinamentos para seu pet de apoio.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.circleButton}
+              onPress={() => navigation.navigate('Buscar Videos')}
+            />
+          </View>
+        </>
+      )}
     </View>
   );
 };
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'white',
+  },
   parteSuperior: {
     alignItems: 'center',
     marginBottom: 10,

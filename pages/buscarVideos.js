@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import WebView from 'react-native-webview';
 
 export default function BuscarVideos() {
     const navigation = useNavigation();
@@ -24,7 +23,7 @@ export default function BuscarVideos() {
                 id: 1,
                 title: 'Comandos básicos para cães',
                 thumbnail: defaultThumbnail,
-                videoId: 'VIDEO_ID_1',
+                videoId: 'dY8ajyiZgIY',
             },
             {
                 id: 2,
@@ -127,27 +126,50 @@ export default function BuscarVideos() {
             </ScrollView>
 
             <Modal
-                animationType="slide"
+                animationType="fade"
                 transparent={true}
                 visible={modalVisible}
                 onRequestClose={() => setModalVisible(false)}
             >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalContent}>
-                        <TouchableOpacity 
-                            style={styles.closeButton}
-                            onPress={() => setModalVisible(false)}
-                        >
-                            <Ionicons name="close" size={30} color="#fff" />
-                        </TouchableOpacity>
-                        {selectedVideo && (
-                            <WebView
-                                source={{ uri: `https://www.youtube.com/embed/${selectedVideo.videoId}` }}
-                                style={styles.webview}
+                <TouchableOpacity 
+                    style={styles.modalContainer}
+                    activeOpacity={1}
+                    onPress={() => setModalVisible(false)}
+                >
+                    <TouchableOpacity 
+                        style={styles.closeButton}
+                        onPress={() => setModalVisible(false)}
+                    >
+                        <Text style={styles.closeButtonText}>✕</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                        activeOpacity={1} 
+                        style={styles.modalContent}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+                        {selectedVideo && Platform.OS === 'web' ? (
+                            <iframe
+                                src={`https://www.youtube.com/embed/${selectedVideo.videoId}?playsinline=0`}
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    border: 'none'
+                                }}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                                allowFullScreen
                             />
+                        ) : selectedVideo && (
+                            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                                <Text style={{ color: '#fff' }}>
+                                    Abra no aplicativo móvel para visualizar o vídeo
+                                </Text>
+                            </View>
                         )}
-                    </View>
-                </View>
+                        </View>
+                    </TouchableOpacity>
+                </TouchableOpacity>
             </Modal>
         </View>
     );
@@ -265,19 +287,41 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.9)',
         justifyContent: 'center',
         alignItems: 'center',
+        padding: 20,
     },
     modalContent: {
-        width: '100%',
-        height: '40%',
+        width: Platform.OS === 'web' ? '90%' : '100%',
+        maxWidth: 1000,
+        aspectRatio: 16/9,
         backgroundColor: '#000',
         position: 'relative',
+        marginTop: 40,
     },
     closeButton: {
         position: 'absolute',
-        top: 10,
-        right: 10,
-        zIndex: 1,
-        padding: 10,
+        top: 0,
+        right: Platform.OS === 'web' ? '5%' : 15,
+        zIndex: 9999,
+        padding: 8,
+        backgroundColor: '#fea740',
+        borderRadius: 50,
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+    },
+    closeButtonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
     },
     webview: {
         flex: 1,

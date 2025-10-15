@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image, TextInput, ScrollView, Modal, ActivityIndicator, Platform } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
-import { auth } from '../configs/firebase_config';
+import { StyleSheet, Text, View, TouchableOpacity, Image, TextInput, ScrollView, Modal, ActivityIndicator, Platform, Alert } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { auth, db } from '../configs/firebase_config';
+import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase, STORAGE_BUCKET } from '../configs/supabase_config';
 
 const CustomAlert = ({ visible, title, message, onClose }) => {
   if (!visible) return null;
   
   if (Platform.OS === 'web') {
-    // Web alert implementation
     return (
       <Modal
         animationType="fade"
@@ -27,7 +28,6 @@ const CustomAlert = ({ visible, title, message, onClose }) => {
       </Modal>
     );
   } else {
-    // Native platforms use standard Alert
     Alert.alert(title, message, [{ text: 'OK', onPress: onClose }]);
     return null;
   }
@@ -52,6 +52,9 @@ const Adocao = ({ navigation }) => {
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [termosGerados, setTermosGerados] = useState({});
+  const [animaisDisponiveis, setAnimaisDisponiveis] = useState([]);
+  const [loadingAnimais, setLoadingAnimais] = useState(true);
+  const [animaisJaCandidatados, setAnimaisJaCandidatados] = useState([]);
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -62,43 +65,181 @@ const Adocao = ({ navigation }) => {
         email: user.email || ''
       }));
     }
+    loadAnimaisDisponiveis();
   }, []);
+
+  // Buscar animais disponíveis do Firestore
+  const loadAnimaisDisponiveis = async () => {
+    try {
+      setLoadingAnimais(true);
+      const user = auth.currentUser;
+      
+      // Buscar animais disponíveis
+      const animaisRef = collection(db, 'animais');
+      const q = query(animaisRef, where('status', '==', 'Disponível'));
+      
+      const querySnapshot = await getDocs(q);
+      const animaisData = [];
+      
+      querySnapshot.forEach((doc) => {
+        animaisData.push({
+          id: doc.id,
+          ...doc.data()
+        });
+      });
+      
+      // Ordenar localmente por data de criação (mais recentes primeiro)
+      animaisData.sort((a, b) => {
+        const dateA = a.criadoEm?.toDate?.() || new Date(0);
+        const dateB = b.criadoEm?.toDate?.() || new Date(0);
+        return dateB - dateA;
+      });
+      
+      setAnimaisDisponiveis(animaisData);
+
+      // Buscar candidaturas do usuário atual
+      if (user) {
+        const candidaturasRef = collection(db, 'candidaturas');
+        const qCandidaturas = query(candidaturasRef, where('candidatoId', '==', user.uid));
+        const candidaturasSnapshot = await getDocs(qCandidaturas);
+        
+        const animaisCandidatados = [];
+        candidaturasSnapshot.forEach((doc) => {
+          animaisCandidatados.push(doc.data().animalId);
+        });
+        
+        setAnimaisJaCandidatados(animaisCandidatados);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar animais:', error);
+      setAlertConfig({
+        visible: true,
+        title: 'Erro',
+        message: 'Não foi possível carregar os animais disponíveis.'
+      });
+    } finally {
+      setLoadingAnimais(false);
+    }
+  };
+
+  const jaSeCandidatou = (animalId) => {
+    return animaisJaCandidatados.includes(animalId);
+  };
 
   const handleUploadComprovante = async (cardId) => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
-        copyToCacheDirectory: true
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        setAlertConfig({
+          visible: true,
+          title: 'Permissão negada',
+          message: 'Precisamos de permissão para acessar suas fotos.'
+        });
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
       });
 
-      if (result.canceled === false && result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-        const fileSize = file.size;
-        const maxSize = 5 * 1024 * 1024; 
-
-        if (fileSize > maxSize) {
-          setAlertConfig({
-            visible: true,
-            title: 'Erro',
-            message: 'O arquivo é muito grande. Selecione um arquivo menor que 5MB.'
-          });
-          return;
-        }
-
+      if (!result.canceled) {
+        const imageUri = result.assets[0].uri;
         setComprovantes(prev => ({
           ...prev,
           [cardId]: {
-            file: file,
-            nome: file.name
+            uri: imageUri,
+            nome: `comprovante_${cardId}.jpg`,
+            uploaded: false 
           }
         }));
       }
     } catch (error) {
+      console.error('Erro ao selecionar imagem:', error);
       setAlertConfig({
         visible: true,
         title: 'Erro',
-        message: 'Não foi possível selecionar o documento. Tente novamente.'
+        message: 'Não foi possível selecionar a imagem. Tente novamente.'
       });
+    }
+  };
+
+  const uploadComprovanteToSupabase = async (imageUri, animalId) => {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Usuário não autenticado');
+
+      const fileExt = imageUri.split('.').pop() || 'jpg';
+      const fileName = `comprovante_${user.uid}_${animalId}_${Date.now()}.${fileExt}`;
+      const filePath = `comprovantes/${fileName}`;
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        
+        const { data, error } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(filePath, blob, {
+            contentType: `image/${fileExt}`,
+            upsert: false
+          });
+
+        if (error) throw error;
+      } else {
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        
+        const { data, error } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(filePath, blob, {
+            contentType: `image/${fileExt}`,
+            upsert: false
+          });
+
+        if (error) throw error;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Erro ao fazer upload do comprovante:', error);
+      throw error;
+    }
+  };
+
+  const uploadTermoToSupabase = async (termoConteudo, animalId) => {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Usuário não autenticado');
+
+      const fileName = `termo_${user.uid}_${animalId}_${Date.now()}.txt`;
+      const filePath = `termos/${fileName}`;
+
+      const blob = new Blob([termoConteudo], { type: 'text/plain' });
+
+      const { data, error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(filePath, blob, {
+          contentType: 'text/plain',
+          upsert: false
+        });
+
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Erro ao fazer upload do termo:', error);
+      throw error;
     }
   };
 
@@ -184,24 +325,6 @@ const Adocao = ({ navigation }) => {
     }
   };
 
-  const cards = [
-    {
-      id: 1,
-      nome: 'Rex - Cachorro',
-      imagem: 'https://placedog.net/400/300?id=1',
-    },
-    {
-      id: 2,
-      nome: 'Mimi - Cachorro',
-      imagem: 'https://placedog.net/401/301?id=2',
-    },
-    {
-      id: 3,
-      nome: 'Ursão - Urso',
-      imagem: 'https://placebear.com/400/300',
-    },
-  ];
-
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -211,40 +334,54 @@ const Adocao = ({ navigation }) => {
         <Text style={styles.textoVoltar}>Voltar</Text>
       </TouchableOpacity>
 
-      <ScrollView contentContainerStyle={styles.cardsContainer}>
-        {cards.map(card => (
-          <View key={card.id} style={styles.card}>
-            <Image
-              source={{ uri: card.imagem }}
-              style={styles.imagem}
-              resizeMode="cover"
-            />
-            <Text style={styles.nomeAnimal}>{card.nome}</Text>
+      {loadingAnimais ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4e2096" />
+          <Text style={styles.loadingText}>Carregando animais disponíveis...</Text>
+        </View>
+      ) : animaisDisponiveis.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Nenhum animal disponível para adoção no momento.</Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.cardsContainer}>
+          {animaisDisponiveis.map(animal => (
+            <View key={animal.id} style={styles.card}>
+              <Image
+                source={{ uri: animal.fotoUrl }}
+                style={styles.imagem}
+                resizeMode="cover"
+              />
+              <Text style={styles.nomeAnimal}>{animal.nome} - {animal.tipo}</Text>
 
-            {!formAbertoId || formAbertoId !== card.id ? (
-              <TouchableOpacity
-                style={styles.botaoAdotar}
-                onPress={() => setFormAbertoId(card.id)}
-              >
-                <Text style={styles.textoBotaoAdotar}>Adotar</Text>
-              </TouchableOpacity>
-            ) : (
+              {jaSeCandidatou(animal.id) ? (
+                <View style={styles.jaCandidatadoContainer}>
+                  <Text style={styles.jaCandidatadoText}>✓ Você já se candidatou a este animal</Text>
+                </View>
+              ) : !formAbertoId || formAbertoId !== animal.id ? (
+                <TouchableOpacity
+                  style={styles.botaoAdotar}
+                  onPress={() => setFormAbertoId(animal.id)}
+                >
+                  <Text style={styles.textoBotaoAdotar}>Adotar</Text>
+                </TouchableOpacity>
+              ) : (
 
-              <View style={styles.formulario}>
+                <View style={styles.formulario}>
 
                 <View style={styles.comprovanteContainer}>
-                  {!comprovantes[card.id] ? (
+                  {!comprovantes[animal.id] ? (
                     <TouchableOpacity
                       style={styles.botaoUpload}
-                      onPress={() => handleUploadComprovante(card.id)}
+                      onPress={() => handleUploadComprovante(animal.id)}
                     >
-                      <Text style={styles.textoUpload}>Anexar comprovante de residência</Text>
+                      <Text style={styles.textoUpload}>Anexar comprovante de residência (Imagem)</Text>
                     </TouchableOpacity>
                   ) : (
                     <View style={styles.comprovanteInfo}>
                       <View style={styles.arquivoInfo}>
                         <Text style={styles.comprovanteNome} numberOfLines={1} ellipsizeMode="middle">
-                          {comprovantes[card.id].nome}
+                          {comprovantes[animal.id].nome}
                         </Text>
                         <Text style={styles.comprovanteData}>
                           {new Date().toLocaleDateString()}
@@ -254,7 +391,7 @@ const Adocao = ({ navigation }) => {
                         onPress={() => {
                           setComprovantes(prev => {
                             const novo = {...prev};
-                            delete novo[card.id];
+                            delete novo[animal.id];
                             return novo;
                           });
                         }}
@@ -266,10 +403,10 @@ const Adocao = ({ navigation }) => {
                   )}
                 </View>
 
-                {!termosGerados[card.id] ? (
+                {!termosGerados[animal.id] ? (
                   <TouchableOpacity
                     style={styles.botaoGerarTermo}
-                    onPress={() => abrirModalTermo(card)}
+                    onPress={() => abrirModalTermo(animal)}
                   >
                     <Text style={styles.textoBotaoTermo}>Gerar termo de responsabilidade</Text>
                   </TouchableOpacity>
@@ -277,16 +414,16 @@ const Adocao = ({ navigation }) => {
                   <View style={styles.comprovanteInfo}>
                     <View style={styles.arquivoInfo}>
                       <Text style={styles.comprovanteNome} numberOfLines={1} ellipsizeMode="middle">
-                        {termosGerados[card.id].nome}
+                        {termosGerados[animal.id].nome}
                       </Text>
                       <Text style={styles.comprovanteData}>
-                        {termosGerados[card.id].data}
+                        {termosGerados[animal.id].data}
                       </Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => {
                         try {
-                          setTermoAtual(termosGerados[card.id]);
+                          setTermoAtual(termosGerados[animal.id]);
                           setModalVisualizarTermo(true);
                         } catch (error) {
                           setAlertConfig({
@@ -311,13 +448,13 @@ const Adocao = ({ navigation }) => {
                       // Limpar comprovante
                       setComprovantes(prev => {
                         const novo = {...prev};
-                        delete novo[card.id];
+                        delete novo[animal.id];
                         return novo;
                       });
                       // Limpar termo gerado
                       setTermosGerados(prev => {
                         const novo = {...prev};
-                        delete novo[card.id];
+                        delete novo[animal.id];
                         return novo;
                       });
                       // Limpar CPF
@@ -334,13 +471,13 @@ const Adocao = ({ navigation }) => {
                     style={[
                       styles.botaoAcao,
                       styles.botaoEnviar,
-                      (!comprovantes[card.id] || !termosGerados[card.id]) && styles.botaoEnviarDesabilitado
+                      (!comprovantes[animal.id] || !termosGerados[animal.id] || isLoading) && styles.botaoEnviarDesabilitado
                     ]}
-                    onPress={() => {
-                      if (!comprovantes[card.id] || !termosGerados[card.id]) {
+                    onPress={async () => {
+                      if (!comprovantes[animal.id] || !termosGerados[animal.id]) {
                         let mensagem = [];
-                        if (!comprovantes[card.id]) mensagem.push('comprovante de residência');
-                        if (!termosGerados[card.id]) mensagem.push('termo de responsabilidade');
+                        if (!comprovantes[animal.id]) mensagem.push('comprovante de residência');
+                        if (!termosGerados[animal.id]) mensagem.push('termo de responsabilidade');
                         
                         setAlertConfig({
                           visible: true,
@@ -349,40 +486,115 @@ const Adocao = ({ navigation }) => {
                         });
                         return;
                       }
-                      setAlertConfig({
-                        visible: true,
-                        title: 'Sucesso',
-                        message: 'Solicitação de adoção enviada com sucesso!'
-                      });
-                      // Limpar tudo após o envio
-                      setFormAbertoId(null);
-                      setComprovantes(prev => {
-                        const novo = {...prev};
-                        delete novo[card.id];
-                        return novo;
-                      });
-                      setTermosGerados(prev => {
-                        const novo = {...prev};
-                        delete novo[card.id];
-                        return novo;
-                      });
-                      setUserData(prev => ({
-                        ...prev,
-                        cpf: ''
-                      }));
+
+                      try {
+                        setIsLoading(true);
+                        const user = auth.currentUser;
+                        
+                        if (!user) {
+                          setAlertConfig({
+                            visible: true,
+                            title: 'Erro',
+                            message: 'Usuário não autenticado.'
+                          });
+                          return;
+                        }
+
+                        // 1. Upload do comprovante de residência
+                        const comprovanteUrl = await uploadComprovanteToSupabase(
+                          comprovantes[animal.id].uri,
+                          animal.id
+                        );
+
+                        // 2. Upload do termo de responsabilidade
+                        const termoUrl = await uploadTermoToSupabase(
+                          termosGerados[animal.id].conteudo,
+                          animal.id
+                        );
+
+                        const candidaturasRef = collection(db, 'candidaturas');
+                        await addDoc(candidaturasRef, {
+                          animalId: animal.id,
+                          animalNome: animal.nome,
+                          animalTipo: animal.tipo,
+                          doadorId: animal.doadorId,
+                          doadorEmail: animal.doadorEmail,
+                          candidatoId: user.uid,
+                          candidatoNome: userData.nome,
+                          candidatoEmail: userData.email,
+                          candidatoCPF: userData.cpf,
+                          comprovanteUrl: comprovanteUrl,
+                          termoUrl: termoUrl,
+                          status: 'Pendente',
+                          criadoEm: serverTimestamp()
+                        });
+
+                        const animalRef = doc(db, 'animais', animal.id);
+                        await updateDoc(animalRef, {
+                          candidatos: arrayUnion({
+                            id: user.uid,
+                            nome: userData.nome,
+                            email: userData.email,
+                            cpf: userData.cpf,
+                            comprovanteUrl: comprovanteUrl,
+                            termoUrl: termoUrl,
+                            dataInscricao: new Date().toISOString()
+                          })
+                        });
+
+                        setAlertConfig({
+                          visible: true,
+                          title: 'Sucesso',
+                          message: 'Solicitação de adoção enviada com sucesso! O doador receberá sua candidatura. E se você for selecionado, ele entrará em contato por e-mail.'
+                        });
+
+                        setFormAbertoId(null);
+                        setComprovantes(prev => {
+                          const novo = {...prev};
+                          delete novo[animal.id];
+                          return novo;
+                        });
+                        setTermosGerados(prev => {
+                          const novo = {...prev};
+                          delete novo[animal.id];
+                          return novo;
+                        });
+                        setUserData(prev => ({
+                          ...prev,
+                          cpf: ''
+                        }));
+
+                        await loadAnimaisDisponiveis();
+
+                      } catch (error) {
+                        console.error('Erro ao enviar candidatura:', error);
+                        setAlertConfig({
+                          visible: true,
+                          title: 'Erro',
+                          message: 'Não foi possível enviar a candidatura. Tente novamente.'
+                        });
+                      } finally {
+                        setIsLoading(false);
+                      }
                     }}
+                    disabled={!comprovantes[animal.id] || !termosGerados[animal.id] || isLoading}
                   >
-                    <Text style={[
-                      styles.textoBotaoEnviar,
-                      (!comprovantes[card.id] || !termosGerados[card.id]) && styles.textoBotaoEnviarDesabilitado
-                    ]}>Enviar</Text>
+                    {isLoading ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <Text style={[
+                        styles.textoBotaoEnviar,
+                        (!comprovantes[animal.id] || !termosGerados[animal.id]) && styles.textoBotaoEnviarDesabilitado
+                      ]}>Enviar</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
             )}
           </View>
-        ))}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
 
       <Modal
         animationType="none"
@@ -863,6 +1075,42 @@ const styles = StyleSheet.create({
     color: '#333',
     lineHeight: 24,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 80,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  jaCandidatadoContainer: {
+    marginTop: 15,
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    alignItems: 'center',
+  },
+  jaCandidatadoText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });
 
