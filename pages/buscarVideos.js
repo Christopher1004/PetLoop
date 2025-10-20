@@ -25,40 +25,23 @@ export default function BuscarVideos() {
                 thumbnail: defaultThumbnail,
                 videoId: 'dY8ajyiZgIY',
             },
-            {
-                id: 2,
-                title: 'Como ensinar seu cachorro a sentar',
-                thumbnail: defaultThumbnail,
-                videoId: 'VIDEO_ID_2',
-            },
         ],
         gatos: [
             {
                 id: 3,
                 title: 'Treinamento para gatos filhotes',
-                thumbnail: defaultThumbnail,
-                videoId: 'VIDEO_ID_3',
-            },
-            {
-                id: 4,
-                title: 'Como ensinar seu gato a usar a caixa de areia',
-                thumbnail: defaultThumbnail,
-                videoId: 'VIDEO_ID_4',
+                thumbnail: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+                videoId: 'q0v2QCsCoWs',
             },
         ],
         cavalos: [
             {
                 id: 5,
-                title: 'Adestramento básico para cavalos',
-                thumbnail: defaultThumbnail,
-                videoId: 'VIDEO_ID_5',
+                title: 'Treinamento para cavalos',
+                thumbnail: 'https://images.unsplash.com/photo-1553284965-83fd3e82fa5a?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+                videoId: 'Ik1HynKt49s',
             },
-            {
-                id: 6,
-                title: 'Como treinar cavalos jovens',
-                thumbnail: defaultThumbnail,
-                videoId: 'VIDEO_ID_6',
-            },
+            
         ],
     };
 
