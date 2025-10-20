@@ -286,36 +286,58 @@ const MeusAnimais = ({ navigation }) => {
     }
   };
 
-  const handleDelete = (animal) => {
-    Alert.alert(
-      'Confirmar Exclusão',
-      `Tem certeza que deseja excluir ${animal.nome}? Esta ação não pode ser desfeita.`,
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel'
-        },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const animalRef = doc(db, 'animais', animal.id);
-              await deleteDoc(animalRef);
+  const handleDelete = async (animal) => {
+    const confirmarExclusao = async () => {
+      try {
+        setUpdating(true);
+        const animalRef = doc(db, 'animais', animal.id);
+        await deleteDoc(animalRef);
 
-              setMeusAnimais(prevAnimais =>
-                prevAnimais.filter(a => a.id !== animal.id)
-              );
+        setMeusAnimais(prevAnimais =>
+          prevAnimais.filter(a => a.id !== animal.id)
+        );
 
-              Alert.alert('Sucesso', 'Animal excluído com sucesso!');
-            } catch (error) {
-              console.error('Erro ao excluir animal:', error);
-              Alert.alert('Erro', 'Não foi possível excluir o animal.');
-            }
-          }
+        if (Platform.OS === 'web') {
+          window.alert('Sucesso! Animal excluído com sucesso!');
+        } else {
+          Alert.alert('Sucesso', 'Animal excluído com sucesso!');
         }
-      ]
-    );
+        setUpdating(false);
+      } catch (error) {
+        console.error('Erro ao excluir animal:', error);
+        if (Platform.OS === 'web') {
+          window.alert('Erro: Não foi possível excluir o animal. Tente novamente.');
+        } else {
+          Alert.alert('Erro', 'Não foi possível excluir o animal.');
+        }
+        setUpdating(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmado = window.confirm(
+        `Tem certeza que deseja excluir ${animal.nome}? Esta ação não pode ser desfeita.`
+      );
+      if (confirmado) {
+        await confirmarExclusao();
+      }
+    } else {
+      Alert.alert(
+        'Confirmar Exclusão',
+        `Tem certeza que deseja excluir ${animal.nome}? Esta ação não pode ser desfeita.`,
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel'
+          },
+          {
+            text: 'Excluir',
+            style: 'destructive',
+            onPress: confirmarExclusao
+          }
+        ]
+      );
+    }
   };
 
   return (

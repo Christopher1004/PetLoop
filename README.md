@@ -14,5 +14,5 @@
 
 - **Christopher**
 - **Natã**
-- **Yago**
-- **Thaissa** 
+- **Thaissa**
+- **Yago** 
